@@ -1,0 +1,122 @@
+{
+  "id": "com.mattermost.plugin-group-mention",
+  "name": "Group Mention",
+  "description": "Enable @group mentions for Mattermost Community Edition. Create custom groups and mention all members at once.",
+  "version": "1.0.0",
+  "min_server_version": "9.0.0",
+  "server": {
+    "executables": {
+      "linux-amd64": "server/dist/plugin-linux-amd64",
+      "linux-arm64": "server/dist/plugin-linux-arm64",
+      "darwin-amd64": "server/dist/plugin-darwin-amd64",
+      "darwin-arm64": "server/dist/plugin-darwin-arm64",
+      "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+    }
+  },
+  "webapp": {
+    "bundle_path": "webapp/dist/main.js"
+  },
+  "settings_schema": {
+    "header": "Configure group mention behavior and limits for your Mattermost instance.",
+    "footer": "",
+    "settings": [
+      {
+        "key": "MaxExpandUsers",
+        "display_name": "Maximum Users Per Group Mention",
+        "type": "number",
+        "help_text": "Maximum number of users that can be notified from a single group mention. Prevents spam in large groups.",
+        "default": 50
+      },
+      {
+        "key": "MaxMentionsPerMessage",
+        "display_name": "Maximum Group Mentions Per Message",
+        "type": "number",
+        "help_text": "Maximum number of group mentions allowed in a single message.",
+        "default": 3
+      },
+      {
+        "key": "PerUserPerMinute",
+        "display_name": "Rate Limit: Mentions Per User Per Minute",
+        "type": "number",
+        "help_text": "Maximum group mentions a user can send per minute.",
+        "default": 10
+      },
+      {
+        "key": "PerChannelPerMinute",
+        "display_name": "Rate Limit: Mentions Per Channel Per Minute",
+        "type": "number",
+        "help_text": "Maximum group mentions allowed in a channel per minute.",
+        "default": 20
+      },
+      {
+        "key": "PerGroupPerMinute",
+        "display_name": "Rate Limit: Times A Group Can Be Mentioned Per Minute",
+        "type": "number",
+        "help_text": "Maximum times a specific group can be mentioned per minute.",
+        "default": 15
+      },
+      {
+        "key": "AllowUserManagedGroups",
+        "display_name": "Allow Regular Users to Create Groups",
+        "type": "bool",
+        "help_text": "If enabled, any user can create and manage groups. If disabled, only team/channel admins can manage groups.",
+        "default": false
+      },
+      {
+        "key": "DefaultGroupVisibility",
+        "display_name": "Default Group Visibility",
+        "type": "dropdown",
+        "help_text": "Default visibility setting for new groups.",
+        "default": "public",
+        "options": [
+          {
+            "display_name": "Public (all users can see and use)",
+            "value": "public"
+          },
+          {
+            "display_name": "Private (only owners can see member list)",
+            "value": "private"
+          }
+        ]
+      },
+      {
+        "key": "ExpandMode",
+        "display_name": "Mention Expansion Mode",
+        "type": "dropdown",
+        "help_text": "How group mentions should be handled: notify-only keeps @groupname as-is and sends notifications; text-expand replaces @groupname with individual @mentions in the message.",
+        "default": "notify-only",
+        "options": [
+          {
+            "display_name": "Notify Only (recommended)",
+            "value": "notify-only"
+          },
+          {
+            "display_name": "Text Expand + Notify",
+            "value": "text-expand"
+          }
+        ]
+      },
+      {
+        "key": "LargeChannelMemberThreshold",
+        "display_name": "Large Channel Threshold",
+        "type": "number",
+        "help_text": "Number of channel members above which a channel is considered 'large'.",
+        "default": 1000
+      },
+      {
+        "key": "RequireChannelAdminInLargeChannels",
+        "display_name": "Require Channel Admin in Large Channels",
+        "type": "bool",
+        "help_text": "If enabled, only channel admins can use group mentions in large channels.",
+        "default": true
+      },
+      {
+        "key": "EnableDebugLogging",
+        "display_name": "Enable Debug Logging",
+        "type": "bool",
+        "help_text": "Enable detailed debug logs for troubleshooting.",
+        "default": false
+      }
+    ]
+  }
+}
