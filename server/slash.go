@@ -323,22 +323,22 @@ Create and manage custom mention groups for your team.
 
 ### Commands
 
-* **/group create <name> [--public|--private] [--owners @user1 @user2] [--members @user1 @user2]**
+* **/group create \<name\> [--public|--private] [--owners \@user1 \@user2] [--members \@user1 \@user2]**
   Create a new group
 
-* **/group add <name> @user1 @user2 ...**
+* **/group add \<name\> \@user1 \@user2 ...**
   Add members to a group
 
-* **/group remove <name> @user1 @user2 ...**
+* **/group remove \<name\> \@user1 \@user2 ...**
   Remove members from a group
 
 * **/group list**
   List all groups for the current team
 
-* **/group show <name>**
+* **/group show \<name\>**
   Show details about a specific group
 
-* **/group delete <name>**
+* **/group delete \<name\>**
   Delete a group
 
 * **/group help**
@@ -346,7 +346,7 @@ Create and manage custom mention groups for your team.
 
 ### Usage
 
-Once created, mention a group using **@groupname** in any message.
+Once created, mention a group using ` + "`@groupname`" + ` in any message.
 All group members will receive a notification.
 
 ### Examples
