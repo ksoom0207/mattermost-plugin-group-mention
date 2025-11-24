@@ -5,24 +5,22 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
 // handleHTTP routes HTTP requests
-func (p *Plugin) handleHTTP(w plugin.ResponseWriter, r *plugin.Request) {
+func (p *Plugin) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/groups":
 		p.handleGetGroups(w, r)
 	case "/api/groups/autocomplete":
 		p.handleAutocomplete(w, r)
 	default:
-		http.NotFound(w, &http.Request{Method: r.Method, URL: r.URL})
+		http.NotFound(w, r)
 	}
 }
 
 // handleGetGroups returns groups for a team
-func (p *Plugin) handleGetGroups(w plugin.ResponseWriter, r *plugin.Request) {
+func (p *Plugin) handleGetGroups(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-Id")
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -55,7 +53,7 @@ func (p *Plugin) handleGetGroups(w plugin.ResponseWriter, r *plugin.Request) {
 }
 
 // handleAutocomplete returns group suggestions for autocomplete
-func (p *Plugin) handleAutocomplete(w plugin.ResponseWriter, r *plugin.Request) {
+func (p *Plugin) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-Id")
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -122,14 +120,14 @@ func (p *Plugin) handleAutocomplete(w plugin.ResponseWriter, r *plugin.Request) 
 }
 
 // writeJSON writes a JSON response
-func writeJSON(w plugin.ResponseWriter, statusCode int, data interface{}) {
+func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(data)
 }
 
 // readJSON reads a JSON request body
-func readJSON(r *plugin.Request, v interface{}) error {
+func readJSON(r *http.Request, v interface{}) error {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err

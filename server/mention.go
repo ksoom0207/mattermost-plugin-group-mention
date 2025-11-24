@@ -28,8 +28,8 @@ func (p *Plugin) processGroupMentions(post *model.Post) {
 		return
 	}
 
-	// Get user
-	user, appErr := p.API.GetUser(post.UserId)
+	// Get user (for permission checks)
+	_, appErr = p.API.GetUser(post.UserId)
 	if appErr != nil {
 		p.logError("Failed to get user", "user_id", post.UserId, "error", appErr.Error())
 		return

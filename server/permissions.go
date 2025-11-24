@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/mattermost/mattermost/server/public/model"
-)
-
 // canManageGroups checks if a user can create/manage groups
 func (p *Plugin) canManageGroups(userID, teamID string) bool {
 	config := p.getConfiguration()

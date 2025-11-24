@@ -14,7 +14,7 @@ build: server webapp
 ## Builds the server.
 server:
 	mkdir -p server/dist
-	cd server && go build $(GO_BUILD_FLAGS) -o dist/plugin-linux-amd64 ./main.go
+	cd server && go build $(GO_BUILD_FLAGS) -o dist/plugin-linux-amd64 .
 
 ## Builds the webapp.
 webapp:

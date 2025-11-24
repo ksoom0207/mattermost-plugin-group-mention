@@ -56,7 +56,7 @@ func TestMentionRegex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := regex.FindAllStringSubmatch(tt.message, -1)
 
-			var found []string
+			found := make([]string, 0)
 			for _, match := range matches {
 				if len(match) > 1 {
 					found = append(found, match[1])

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
 	"sync"
 
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -130,7 +131,7 @@ func (p *Plugin) OnConfigurationChange() error {
 }
 
 // ServeHTTP handles HTTP requests to the plugin
-func (p *Plugin) ServeHTTP(c *plugin.Context, w plugin.ResponseWriter, r *plugin.Request) {
+func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	p.handleHTTP(w, r)
 }
 
