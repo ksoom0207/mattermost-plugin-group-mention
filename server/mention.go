@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mattermost/mattermost/server/public/model"
+	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
 var (
@@ -13,7 +14,142 @@ var (
 	mentionRegex = regexp.MustCompile(`(?:^|\s)@([a-zA-Z0-9_\-.]{2,64})\b`)
 )
 
-// processGroupMentions processes a post for group mentions
+// MessageWillBePosted is called before a message is posted
+// This allows us to expand @group mentions to individual @user mentions
+// so Mattermost automatically sends push notifications
+func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*model.Post, string) {
+	if post == nil || post.Message == "" {
+		return post, ""
+	}
+
+	config := p.getConfiguration()
+
+	// Get channel to check if it's large
+	channel, appErr := p.API.GetChannel(post.ChannelId)
+	if appErr != nil {
+		p.logError("Failed to get channel", "channel_id", post.ChannelId, "error", appErr.Error())
+		return post, ""
+	}
+
+	// Check if channel is large and requires admin
+	if config.RequireChannelAdminInLargeChannels {
+		stats, statsErr := p.API.GetChannelStats(post.ChannelId)
+		if statsErr == nil && stats.MemberCount >= int64(config.LargeChannelMemberThreshold) {
+			if !p.isChannelAdmin(post.UserId, post.ChannelId) {
+				return post, "Group mentions are restricted to channel admins in large channels."
+			}
+		}
+	}
+
+	// Find all group mentions in the message
+	matches := mentionRegex.FindAllStringSubmatch(post.Message, -1)
+	if len(matches) == 0 {
+		return post, ""
+	}
+
+	// Extract unique group names
+	groupNames := make(map[string]bool)
+	for _, match := range matches {
+		if len(match) > 1 {
+			groupNames[strings.ToLower(match[1])] = true
+		}
+	}
+
+	if len(groupNames) > config.MaxMentionsPerMessage {
+		return post, fmt.Sprintf("Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage)
+	}
+
+	// Check rate limits first (before expanding)
+	for groupName := range groupNames {
+		if !p.checkRateLimits(post.UserId, post.ChannelId, groupName) {
+			return post, "Rate limit exceeded. Please wait before mentioning this group again."
+		}
+	}
+
+	// Process each group mention and collect members
+	teamID := channel.TeamId
+	groupExpansions := make(map[string][]string) // groupName -> usernames
+
+	for groupName := range groupNames {
+		// Check if it's actually a user mention first
+		userByUsername, _ := p.API.GetUserByUsername(groupName)
+		if userByUsername != nil {
+			// This is a user mention, not a group mention
+			continue
+		}
+
+		// Get the group
+		group, err := p.getGroup(teamID, groupName)
+		if err != nil {
+			p.logError("Failed to get group", "team_id", teamID, "group", groupName, "error", err.Error())
+			continue
+		}
+		if group == nil {
+			// Group doesn't exist, leave the mention as-is
+			continue
+		}
+
+		// Check if group is too large
+		if len(group.Members) > config.MaxExpandUsers {
+			return post, fmt.Sprintf("Group @%s has too many members (%d). Maximum allowed: %d",
+				groupName, len(group.Members), config.MaxExpandUsers)
+		}
+
+		// Collect usernames for members who are in the channel
+		usernames := make([]string, 0)
+		for _, memberID := range group.Members {
+			// Skip the post author
+			if memberID == post.UserId {
+				continue
+			}
+
+			// Skip if user is not in the channel
+			_, err := p.API.GetChannelMember(channel.Id, memberID)
+			if err != nil {
+				continue
+			}
+
+			user, err := p.API.GetUser(memberID)
+			if err == nil {
+				usernames = append(usernames, user.Username)
+			}
+		}
+
+		if len(usernames) > 0 {
+			groupExpansions[groupName] = usernames
+		}
+
+		p.logDebug("Expanding group mention", "group", groupName, "members", len(usernames))
+	}
+
+	// If no groups to expand, return original
+	if len(groupExpansions) == 0 {
+		return post, ""
+	}
+
+	// Expand @groupname to @user1 @user2 @user3 in the message
+	newMessage := post.Message
+	for groupName, usernames := range groupExpansions {
+		// Create the expansion text
+		mentionList := make([]string, len(usernames))
+		for i, username := range usernames {
+			mentionList[i] = "@" + username
+		}
+		expansion := strings.Join(mentionList, " ")
+
+		// Replace @groupname with the expansion
+		// Use regex to replace only whole word matches
+		groupPattern := regexp.MustCompile(`(^|\s)@` + regexp.QuoteMeta(groupName) + `\b`)
+		newMessage = groupPattern.ReplaceAllString(newMessage, "$1"+expansion)
+	}
+
+	post.Message = newMessage
+	return post, ""
+}
+
+// processGroupMentions processes a post for group mentions (DEPRECATED)
+// This function is kept for backward compatibility but is no longer used
+// MessageWillBePosted now handles mention expansion before the post is saved
 func (p *Plugin) processGroupMentions(post *model.Post) {
 	if post == nil || post.Message == "" {
 		return

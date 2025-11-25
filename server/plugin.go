@@ -140,15 +140,16 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	return p.executeCommand(args)
 }
 
-// MessageHasBeenPosted is called when a message is posted
+// MessageHasBeenPosted is no longer used - group mentions are handled in MessageWillBePosted
+// This hook is kept for potential future use (e.g., analytics, logging)
 func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 	config := p.getConfiguration()
 	if config.EnableDebugLogging {
 		p.API.LogDebug("Message posted", "post_id", post.Id, "channel_id", post.ChannelId)
 	}
 
-	// Process group mentions
-	p.processGroupMentions(post)
+	// Note: Group mention processing moved to MessageWillBePosted hook
+	// This allows us to modify the message before it's saved, triggering native notifications
 }
 
 // logDebug logs debug messages if debug logging is enabled
