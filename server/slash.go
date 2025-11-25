@@ -29,6 +29,8 @@ func (p *Plugin) executeCommand(args *model.CommandArgs) (*model.CommandResponse
 		return p.handleGroupAdd(args, actionArgs)
 	case "remove":
 		return p.handleGroupRemove(args, actionArgs)
+	case "update":
+		return p.handleGroupUpdate(args, actionArgs)
 	case "list":
 		return p.handleGroupList(args, actionArgs)
 	case "show":
@@ -315,6 +317,127 @@ func (p *Plugin) handleGroupDelete(args *model.CommandArgs, cmdArgs []string) (*
 	}, nil
 }
 
+// handleGroupUpdate handles /group update command
+func (p *Plugin) handleGroupUpdate(args *model.CommandArgs, cmdArgs []string) (*model.CommandResponse, *model.AppError) {
+	if len(cmdArgs) < 2 {
+		return p.errorResponse("Usage: /group update <name> [--rename <new-name>] [--public|--private] [--owners @user1 @user2]"), nil
+	}
+
+	teamID := args.TeamId
+	groupName := strings.ToLower(cmdArgs[0])
+
+	// Get existing group
+	group, err := p.getGroup(teamID, groupName)
+	if err != nil {
+		return p.errorResponse(fmt.Sprintf("Failed to get group: %s", err.Error())), nil
+	}
+	if group == nil {
+		return p.errorResponse(fmt.Sprintf("Group `@%s` not found.", groupName)), nil
+	}
+
+	// Check permissions
+	if !p.canManageGroup(args.UserId, group) {
+		return p.errorResponse("You don't have permission to update this group."), nil
+	}
+
+	// Track what changed for response message
+	var changes []string
+	newName := ""
+	newVisibility := ""
+	var newOwners []string
+	hasOwnersFlag := false
+
+	// Parse flags
+	i := 1
+	for i < len(cmdArgs) {
+		flag := cmdArgs[i]
+		switch flag {
+		case "--rename":
+			if i+1 >= len(cmdArgs) {
+				return p.errorResponse("--rename requires a new name"), nil
+			}
+			i++
+			newName = strings.ToLower(cmdArgs[i])
+			// Validate new name
+			if newName == groupName {
+				return p.errorResponse("New name must be different from current name."), nil
+			}
+			// Check if new name already exists
+			existingGroup, _ := p.getGroup(teamID, newName)
+			if existingGroup != nil {
+				return p.errorResponse(fmt.Sprintf("Group `@%s` already exists.", newName)), nil
+			}
+			changes = append(changes, fmt.Sprintf("Renamed to `@%s`", newName))
+			i++
+		case "--public":
+			newVisibility = "public"
+			if group.Visibility != "public" {
+				changes = append(changes, "Changed to public")
+			}
+			i++
+		case "--private":
+			newVisibility = "private"
+			if group.Visibility != "private" {
+				changes = append(changes, "Changed to private")
+			}
+			i++
+		case "--owners":
+			hasOwnersFlag = true
+			i++
+			for i < len(cmdArgs) && !strings.HasPrefix(cmdArgs[i], "--") {
+				username := strings.TrimPrefix(cmdArgs[i], "@")
+				user, _ := p.API.GetUserByUsername(username)
+				if user != nil {
+					newOwners = append(newOwners, user.Id)
+				}
+				i++
+			}
+			if len(newOwners) == 0 {
+				return p.errorResponse("--owners requires at least one valid user"), nil
+			}
+			changes = append(changes, fmt.Sprintf("Updated owners (%d)", len(newOwners)))
+		default:
+			i++
+		}
+	}
+
+	if len(changes) == 0 {
+		return p.errorResponse("No changes specified. Use --rename, --public, --private, or --owners"), nil
+	}
+
+	// Apply changes
+	if newVisibility != "" && newVisibility != group.Visibility {
+		if err := p.updateGroupVisibility(teamID, groupName, newVisibility); err != nil {
+			return p.errorResponse(fmt.Sprintf("Failed to update visibility: %s", err.Error())), nil
+		}
+	}
+
+	if hasOwnersFlag {
+		if err := p.updateGroupOwners(teamID, groupName, newOwners); err != nil {
+			return p.errorResponse(fmt.Sprintf("Failed to update owners: %s", err.Error())), nil
+		}
+	}
+
+	// Rename must be last because it changes the key
+	if newName != "" {
+		if err := p.renameGroup(teamID, groupName, newName); err != nil {
+			return p.errorResponse(fmt.Sprintf("Failed to rename group: %s", err.Error())), nil
+		}
+		groupName = newName // Update for response message
+	}
+
+	message := fmt.Sprintf("✅ Group `@%s` updated successfully!\n\n", groupName)
+	message += "**Changes:**\n"
+	for _, change := range changes {
+		message += fmt.Sprintf("- %s\n", change)
+	}
+
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         message,
+	}, nil
+}
+
 // helpResponse returns the help message
 func (p *Plugin) helpResponse() *model.CommandResponse {
 	message := `## Group Mention Plugin - Help
@@ -331,6 +454,9 @@ Create and manage custom mention groups for your team.
 
 * **/group remove \<name\> \@user1 \@user2 ...**
   Remove members from a group
+
+* **/group update \<name\> [--rename \<new-name\>] [--public|--private] [--owners \@user1 \@user2]**
+  Update group settings (name, visibility, or owners)
 
 * **/group list**
   List all groups for the current team
@@ -354,6 +480,8 @@ All group members will receive a notification.
 ` + "```" + `
 /group create dev --public --members @alice @bob @charlie
 /group add dev @david
+/group update dev --rename backend-team --private
+/group update dev --owners @teamlead1 @teamlead2
 /group show dev
 ` + "```" + `
 `

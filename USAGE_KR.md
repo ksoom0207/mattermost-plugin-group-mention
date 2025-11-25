@@ -45,7 +45,31 @@
 /group remove dev @퇴사자
 ```
 
-### 3. 그룹 조회
+### 3. 그룹 설정 변경
+
+`/group update` 명령어로 그룹 이름, 공개/비공개 설정, 오너 목록을 변경할 수 있습니다:
+
+```bash
+# 그룹 이름 변경
+/group update dev --rename backend-team
+
+# 공개/비공개 전환
+/group update dev --private
+/group update dev --public
+
+# 오너 목록 변경
+/group update dev --owners @팀장1 @팀장2
+
+# 여러 설정 동시 변경
+/group update dev --rename backend --private --owners @리드개발자
+```
+
+**주의사항:**
+- `--owners` 옵션은 기존 오너 목록을 **완전히 교체**합니다
+- 그룹 이름 변경 시 기존 이름은 사용할 수 없게 됩니다
+- 권한: 그룹 오너, 팀 관리자, 시스템 관리자만 변경 가능
+
+### 4. 그룹 조회
 
 ```bash
 # 모든 그룹 보기
@@ -72,7 +96,7 @@ Member list:
 - @신입사원
 ```
 
-### 4. 그룹 멘션 사용
+### 5. 그룹 멘션 사용
 
 메시지에서 `@그룹명`을 입력하면 전체 멤버에게 네이티브 푸시 알림이 전송됩니다:
 
@@ -94,13 +118,13 @@ Member list:
 - 메시지 작성자는 자동으로 제외
 - 멘션된 사용자명이 메시지에 직접 표시됨
 
-### 5. 그룹 삭제
+### 6. 그룹 삭제
 
 ```bash
 /group delete dev
 ```
 
-### 6. 도움말
+### 7. 도움말
 
 ```bash
 /group help

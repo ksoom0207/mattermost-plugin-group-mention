@@ -266,3 +266,86 @@ func (p *Plugin) removeMembersFromGroup(teamID, groupName string, userIDs []stri
 	group.Members = newMembers
 	return p.storeGroup(group)
 }
+
+// updateGroupVisibility updates a group's visibility setting
+func (p *Plugin) updateGroupVisibility(teamID, groupName, visibility string) error {
+	group, err := p.getGroup(teamID, groupName)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return errors.New("group not found")
+	}
+
+	group.Visibility = visibility
+	return p.storeGroup(group)
+}
+
+// updateGroupOwners updates a group's owner list
+func (p *Plugin) updateGroupOwners(teamID, groupName string, owners []string) error {
+	group, err := p.getGroup(teamID, groupName)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return errors.New("group not found")
+	}
+
+	group.Owners = owners
+	return p.storeGroup(group)
+}
+
+// renameGroup renames a group (changes the KV key)
+func (p *Plugin) renameGroup(teamID, oldName, newName string) error {
+	// Validate new name
+	if newName == "" || len(newName) < 2 || len(newName) > 64 {
+		return errors.New("group name must be between 2 and 64 characters")
+	}
+
+	// Check if new name already exists
+	existingGroup, _ := p.getGroup(teamID, newName)
+	if existingGroup != nil {
+		return errors.New("a group with the new name already exists")
+	}
+
+	// Get existing group
+	group, err := p.getGroup(teamID, oldName)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return errors.New("group not found")
+	}
+
+	// Update group name
+	group.Name = newName
+
+	// Store with new key
+	data, err := json.Marshal(group)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal group")
+	}
+
+	newKey := getGroupKey(teamID, newName)
+	if appErr := p.API.KVSet(newKey, data); appErr != nil {
+		return errors.Wrap(appErr, "failed to store group with new name")
+	}
+
+	// Delete old key
+	oldKey := getGroupKey(teamID, oldName)
+	if appErr := p.API.KVDelete(oldKey); appErr != nil {
+		// Rollback: delete the new key
+		p.API.KVDelete(newKey)
+		return errors.Wrap(appErr, "failed to delete old group key")
+	}
+
+	// Update index: remove old name, add new name
+	if err := p.removeGroupFromIndex(teamID, oldName); err != nil {
+		return err
+	}
+	if err := p.addGroupToIndex(teamID, newName); err != nil {
+		return err
+	}
+
+	return nil
+}
