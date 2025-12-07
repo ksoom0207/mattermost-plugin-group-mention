@@ -55,20 +55,10 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		}
 	}
 
-	if len(groupNames) > config.MaxMentionsPerMessage {
-		return post, fmt.Sprintf("Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage)
-	}
-
-	// Check rate limits first (before expanding)
-	for groupName := range groupNames {
-		if !p.checkRateLimits(post.UserId, post.ChannelId, groupName) {
-			return post, "Rate limit exceeded. Please wait before mentioning this group again."
-		}
-	}
-
 	// Process each group mention and collect members
 	teamID := channel.TeamId
 	groupExpansions := make(map[string][]string) // groupName -> usernames
+	actualGroupCount := 0 // Track actual group mentions (not user mentions)
 
 	for groupName := range groupNames {
 		// Check if it's actually a user mention first
@@ -87,6 +77,19 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		if group == nil {
 			// Group doesn't exist, leave the mention as-is
 			continue
+		}
+
+		// This is an actual group mention
+		actualGroupCount++
+
+		// Check if too many group mentions
+		if actualGroupCount > config.MaxMentionsPerMessage {
+			return post, fmt.Sprintf("Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage)
+		}
+
+		// Check rate limits
+		if !p.checkRateLimits(post.UserId, post.ChannelId, groupName) {
+			return post, "Rate limit exceeded. Please wait before mentioning this group again."
 		}
 
 		// Check if group is too large
