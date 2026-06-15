@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/model"
+	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
 )
 
@@ -65,17 +65,17 @@ func (p *Plugin) getConfiguration() *Config {
 // loadConfiguration loads the plugin configuration from Mattermost
 func (p *Plugin) loadConfiguration() *Config {
 	config := &Config{
-		MaxExpandUsers:                  50,
-		MaxMentionsPerMessage:           3,
-		PerUserPerMinute:                10,
-		PerChannelPerMinute:             20,
-		PerGroupPerMinute:               15,
-		AllowUserManagedGroups:          false,
-		DefaultGroupVisibility:          "public",
-		ExpandMode:                      "notify-only",
-		LargeChannelMemberThreshold:     1000,
+		MaxExpandUsers:                     50,
+		MaxMentionsPerMessage:              3,
+		PerUserPerMinute:                   10,
+		PerChannelPerMinute:                20,
+		PerGroupPerMinute:                  15,
+		AllowUserManagedGroups:             false,
+		DefaultGroupVisibility:             "public",
+		ExpandMode:                         "notify-only",
+		LargeChannelMemberThreshold:        1000,
 		RequireChannelAdminInLargeChannels: true,
-		EnableDebugLogging:              false,
+		EnableDebugLogging:                 false,
 	}
 
 	// Load from plugin configuration
@@ -148,8 +148,7 @@ func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 		p.API.LogDebug("Message posted", "post_id", post.Id, "channel_id", post.ChannelId)
 	}
 
-	// Note: Group mention processing moved to MessageWillBePosted hook
-	// This allows us to modify the message before it's saved, triggering native notifications
+	// Note: Group mention validation and optional text expansion are handled in MessageWillBePosted.
 }
 
 // logDebug logs debug messages if debug logging is enabled

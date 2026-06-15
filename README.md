@@ -12,7 +12,7 @@ Enable custom `@group` mentions for Mattermost Community Edition. Create and man
 - 🔒 **Public & Private Groups**: Control who can see and use groups
 - 🛡️ **Permission Control**: Restrict group management to admins or allow all users
 - ⚡ **Rate Limiting**: Prevent spam with configurable rate limits
-- 🎯 **Smart Notifications**: Notify all group members without cluttering messages
+- 🎯 **Configurable Mention Handling**: Keep `@groupname` visible by default, or expand to member mentions for native notifications
 - 📊 **Large Channel Protection**: Prevent @here-style abuse in large channels
 - 🎨 **Visual Highlighting**: Group mentions are highlighted in messages
 - 💬 **Slash Commands**: Easy group management via `/group` commands
@@ -134,9 +134,9 @@ Hey @dev, please review this PR!
 ```
 
 **What happens:**
-- All members of the group receive a mention notification
-- Members get a direct message with a link to the original message
-- The original message displays `@dev` (no text expansion by default)
+- In `notify-only` mode, the original message displays `@dev` without text expansion
+- In `text-expand` mode, the original message is rewritten to individual `@user` mentions so Mattermost can trigger native mention notifications
+- Mattermost Team Edition may not trigger native mention notifications for custom groups unless `text-expand` mode is enabled
 - Rate limits prevent spam and abuse
 
 ## Slash Commands
@@ -166,7 +166,7 @@ Configure the plugin in **System Console > Plugins > Group Mention**.
 | **Rate Limit: Per Group Per Minute** | 15 | Maximum times a specific group can be mentioned per minute |
 | **Allow Regular Users to Create Groups** | false | If enabled, any user can create groups. Otherwise, only admins can. |
 | **Default Group Visibility** | public | Default visibility for new groups (public or private) |
-| **Mention Expansion Mode** | notify-only | How mentions are handled:<br>- `notify-only`: Keep @groupname as-is, send notifications<br>- `text-expand`: Replace with individual @mentions |
+| **Mention Expansion Mode** | notify-only | How mentions are handled:<br>- `notify-only`: Keep `@groupname` as-is. Native Mattermost mention notifications may not fire for custom groups in Team Edition.<br>- `text-expand`: Replace `@groupname` with individual `@mentions` for reliable native notifications. |
 | **Large Channel Threshold** | 1000 | Number of members above which a channel is considered "large" |
 | **Require Channel Admin in Large Channels** | true | Only channel admins can use group mentions in large channels |
 | **Enable Debug Logging** | false | Enable detailed debug logs for troubleshooting |
@@ -245,7 +245,7 @@ Group mentions work in:
 ### What are the performance considerations?
 
 **Optimizations:**
-- Notifications are sent asynchronously
+- `notify-only` mode avoids rewriting message text
 - Rate limiting prevents abuse
 - Large group warnings protect server resources
 - KV store operations are batched
@@ -375,13 +375,15 @@ Before deploying to production, verify:
 3. Check plugin file permissions
 4. Try re-uploading the plugin
 
-### Group mentions don't trigger notifications
+### Group mentions don't trigger native Mattermost notifications
 
 1. Check if group exists: `/group show <name>`
 2. Verify you're using correct syntax: `@groupname` (not `@ groupname`)
-3. Check rate limits in plugin settings
-4. Verify channel permissions (large channel restrictions)
-5. Check server logs for errors
+3. Check **Mention Expansion Mode** in plugin settings
+4. Use `text-expand` mode if you need reliable native Mattermost mention notifications
+5. Use `notify-only` mode if keeping the visible `@groupname` text is more important than native mention notifications
+6. Check rate limits and large channel restrictions
+7. Check server logs for errors
 
 ### Slash commands not working
 

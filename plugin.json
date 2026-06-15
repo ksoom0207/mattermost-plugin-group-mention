@@ -83,7 +83,7 @@
         "key": "ExpandMode",
         "display_name": "Mention Expansion Mode",
         "type": "dropdown",
-        "help_text": "How group mentions should be handled: notify-only keeps @groupname as-is and sends notifications; text-expand replaces @groupname with individual @mentions in the message.",
+        "help_text": "How group mentions should be handled: notify-only keeps @groupname as-is but may not trigger native mention notifications in Team Edition; text-expand replaces @groupname with individual @mentions for reliable native notifications.",
         "default": "notify-only",
         "options": [
           {

@@ -14,6 +14,11 @@ var (
 	mentionRegex = regexp.MustCompile(`(?:^|\s)@([a-zA-Z0-9_\-.]{2,64})\b`)
 )
 
+const (
+	expandModeNotifyOnly = "notify-only"
+	expandModeTextExpand = "text-expand"
+)
+
 func extractMentionNames(message string) map[string]bool {
 	matches := mentionRegex.FindAllStringSubmatch(message, -1)
 	groupNames := make(map[string]bool)
@@ -69,9 +74,30 @@ func (p *Plugin) findActualGroupMentions(teamID string, mentionNames map[string]
 	)
 }
 
+func shouldExpandGroupMentionText(mode string) bool {
+	return mode == expandModeTextExpand
+}
+
+func expandGroupMentionsInMessage(message string, groupExpansions map[string][]string) string {
+	newMessage := message
+	for groupName, usernames := range groupExpansions {
+		mentionList := make([]string, len(usernames))
+		for i, username := range usernames {
+			mentionList[i] = "@" + username
+		}
+		expansion := strings.Join(mentionList, " ")
+
+		groupPattern := regexp.MustCompile(`(^|\s)@` + regexp.QuoteMeta(groupName) + `\b`)
+		newMessage = groupPattern.ReplaceAllString(newMessage, "$1"+expansion)
+	}
+
+	return newMessage
+}
+
 // MessageWillBePosted is called before a message is posted
-// This allows us to expand @group mentions to individual @user mentions
-// so Mattermost automatically sends push notifications
+// This validates group mentions before the post is saved. In text-expand mode,
+// it also expands @group mentions to individual @user mentions so Mattermost
+// can trigger native mention notifications.
 func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*model.Post, string) {
 	if post == nil || post.Message == "" {
 		return post, ""
@@ -115,6 +141,7 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		}
 	}
 
+	expandText := shouldExpandGroupMentionText(config.ExpandMode)
 	groupExpansions := make(map[string][]string) // groupName -> usernames
 
 	for groupName, group := range groups {
@@ -127,6 +154,11 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		if len(group.Members) > config.MaxExpandUsers {
 			return post, fmt.Sprintf("Group @%s has too many members (%d). Maximum allowed: %d",
 				groupName, len(group.Members), config.MaxExpandUsers)
+		}
+
+		if !expandText {
+			p.logDebug("Validated group mention without text expansion", "group", groupName, "members", len(group.Members))
+			continue
 		}
 
 		// Collect usernames for members who are in the channel
@@ -156,28 +188,16 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		p.logDebug("Expanding group mention", "group", groupName, "members", len(usernames))
 	}
 
+	if !expandText {
+		return post, ""
+	}
+
 	// If no groups to expand, return original
 	if len(groupExpansions) == 0 {
 		return post, ""
 	}
 
-	// Expand @groupname to @user1 @user2 @user3 in the message
-	newMessage := post.Message
-	for groupName, usernames := range groupExpansions {
-		// Create the expansion text
-		mentionList := make([]string, len(usernames))
-		for i, username := range usernames {
-			mentionList[i] = "@" + username
-		}
-		expansion := strings.Join(mentionList, " ")
-
-		// Replace @groupname with the expansion
-		// Use regex to replace only whole word matches
-		groupPattern := regexp.MustCompile(`(^|\s)@` + regexp.QuoteMeta(groupName) + `\b`)
-		newMessage = groupPattern.ReplaceAllString(newMessage, "$1"+expansion)
-	}
-
-	post.Message = newMessage
+	post.Message = expandGroupMentionsInMessage(post.Message, groupExpansions)
 	return post, ""
 }
 

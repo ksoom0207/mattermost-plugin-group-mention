@@ -9,9 +9,8 @@ class Plugin implements PluginClass {
         this.registry = registry;
         this.store = store;
 
-        // Note: Group mention detection and notifications are handled server-side.
-        // The server processes @group mentions in MessageHasBeenPosted hook and
-        // sends notifications to all group members.
+        // Note: Group mention detection and optional text expansion are handled server-side.
+        // The server processes @group mentions in the MessageWillBePosted hook.
 
         // Future enhancement: Add autocomplete for @group mentions here
         // registry.registerAutocompleteProvider(...)

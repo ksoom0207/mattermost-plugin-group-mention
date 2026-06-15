@@ -150,3 +150,26 @@ func TestActualGroupMentionLimitIgnoresUsersAndUnknownMentions(t *testing.T) {
 
 	assert.Len(t, groups, 1, "only real groups should count toward MaxMentionsPerMessage")
 }
+
+func TestShouldExpandGroupMentionTextOnlyForTextExpandMode(t *testing.T) {
+	assert.False(t, shouldExpandGroupMentionText(expandModeNotifyOnly))
+	assert.False(t, shouldExpandGroupMentionText(""))
+	assert.False(t, shouldExpandGroupMentionText("unexpected"))
+	assert.True(t, shouldExpandGroupMentionText(expandModeTextExpand))
+}
+
+func TestExpandGroupMentionsInMessageReplacesWholeGroupMentions(t *testing.T) {
+	message := "Hey @dev and @ops-team, not @devops"
+	groupExpansions := map[string][]string{
+		"dev":      {"alice", "bob"},
+		"ops-team": {"charlie"},
+	}
+
+	assert.Equal(t, "Hey @alice @bob and @charlie, not @devops", expandGroupMentionsInMessage(message, groupExpansions))
+}
+
+func TestExpandGroupMentionsInMessagePreservesMessageWithoutExpansions(t *testing.T) {
+	message := "Hey @dev"
+
+	assert.Equal(t, message, expandGroupMentionsInMessage(message, map[string][]string{}))
+}
