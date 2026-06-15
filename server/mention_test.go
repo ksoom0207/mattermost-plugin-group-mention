@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"regexp"
 	"testing"
 
@@ -66,4 +67,86 @@ func TestMentionRegex(t *testing.T) {
 			assert.Equal(t, tt.expected, found)
 		})
 	}
+}
+
+func TestResolveGroupMentionsSkipsUsersAndUnknownMentions(t *testing.T) {
+	mentions := map[string]bool{
+		"alice":   true,
+		"dev":     true,
+		"unknown": true,
+	}
+	groupsByName := map[string]*Group{
+		"dev": &Group{Name: "dev"},
+	}
+
+	groups := resolveGroupMentions(
+		mentions,
+		func(name string) bool {
+			return name == "alice"
+		},
+		func(name string) (*Group, error) {
+			return groupsByName[name], nil
+		},
+		func(string, error) {
+			t.Fatal("unexpected group lookup error")
+		},
+	)
+
+	assert.Equal(t, map[string]*Group{"dev": groupsByName["dev"]}, groups)
+}
+
+func TestResolveGroupMentionsLogsLookupErrorsAndContinues(t *testing.T) {
+	mentions := map[string]bool{
+		"dev": true,
+		"ops": true,
+	}
+	expectedErr := errors.New("kv lookup failed")
+	loggedErrors := map[string]error{}
+
+	groups := resolveGroupMentions(
+		mentions,
+		func(string) bool {
+			return false
+		},
+		func(name string) (*Group, error) {
+			if name == "ops" {
+				return nil, expectedErr
+			}
+			return &Group{Name: name}, nil
+		},
+		func(name string, err error) {
+			loggedErrors[name] = err
+		},
+	)
+
+	assert.Contains(t, groups, "dev")
+	assert.NotContains(t, groups, "ops")
+	assert.Equal(t, map[string]error{"ops": expectedErr}, loggedErrors)
+}
+
+func TestActualGroupMentionLimitIgnoresUsersAndUnknownMentions(t *testing.T) {
+	mentions := map[string]bool{
+		"alice":   true,
+		"bob":     true,
+		"dev":     true,
+		"unknown": true,
+	}
+	groupsByName := map[string]*Group{
+		"dev": &Group{Name: "dev"},
+	}
+
+	groups := resolveGroupMentions(
+		mentions,
+		func(name string) bool {
+			return name == "alice" || name == "bob"
+		},
+		func(name string) (*Group, error) {
+			return groupsByName[name], nil
+		},
+		func(string, error) {
+			t.Fatal("unexpected group lookup error")
+		},
+	)
+
+	assert.Len(t, groups, 1, "only real groups should count toward MaxMentionsPerMessage")
 }

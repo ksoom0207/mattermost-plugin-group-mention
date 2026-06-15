@@ -23,6 +23,8 @@
 - `--owners @user1 @user2`: 그룹 오너 지정
 - `--members @user1 @user2`: 초기 멤버 추가
 
+그룹명은 기존 Mattermost 사용자명과 같을 수 없습니다. 예를 들어 `@alice` 사용자가 있으면 `@team-alice` 또는 `@alice-group` 같은 이름을 사용하세요.
+
 **예시:**
 ```bash
 # 개발팀 그룹 만들기
@@ -332,6 +334,7 @@ https://github.com/company/project/pull/123
 
 **Q: 그룹을 만들 수 없습니다**
 - 관리자가 일반 사용자 그룹 생성을 막았을 수 있음 (`AllowUserManagedGroups=false`)
+- 그룹명이 기존 사용자명과 겹치면 생성/이름변경이 거부됩니다
 - 팀 관리자 또는 시스템 관리자에게 문의
 
 **Q: @그룹명을 입력했는데 메시지가 @사용자1 @사용자2로 바뀝니다**

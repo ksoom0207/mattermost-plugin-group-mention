@@ -7,6 +7,20 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
+func normalizeGroupNameForCommand(name string) string {
+	return strings.ToLower(strings.TrimPrefix(name, "@"))
+}
+
+func groupNameUsernameConflictMessage(groupName string) string {
+	return fmt.Sprintf("Group name `@%s` conflicts with an existing user. Choose a different group name, such as `team-%s` or `%s-group`.",
+		groupName, groupName, groupName)
+}
+
+func (p *Plugin) groupNameConflictsWithUser(groupName string) bool {
+	user, _ := p.API.GetUserByUsername(groupName)
+	return user != nil
+}
+
 // executeCommand handles /group slash commands
 func (p *Plugin) executeCommand(args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
 	split := strings.Fields(args.Command)
@@ -55,7 +69,11 @@ func (p *Plugin) handleGroupCreate(args *model.CommandArgs, cmdArgs []string) (*
 		return p.errorResponse("You don't have permission to create groups."), nil
 	}
 
-	groupName := strings.ToLower(cmdArgs[0])
+	groupName := normalizeGroupNameForCommand(cmdArgs[0])
+	if p.groupNameConflictsWithUser(groupName) {
+		return p.errorResponse(groupNameUsernameConflictMessage(groupName)), nil
+	}
+
 	visibility := p.getConfiguration().DefaultGroupVisibility
 	var owners, members []string
 
@@ -324,7 +342,7 @@ func (p *Plugin) handleGroupUpdate(args *model.CommandArgs, cmdArgs []string) (*
 	}
 
 	teamID := args.TeamId
-	groupName := strings.ToLower(cmdArgs[0])
+	groupName := normalizeGroupNameForCommand(cmdArgs[0])
 
 	// Get existing group
 	group, err := p.getGroup(teamID, groupName)
@@ -357,10 +375,13 @@ func (p *Plugin) handleGroupUpdate(args *model.CommandArgs, cmdArgs []string) (*
 				return p.errorResponse("--rename requires a new name"), nil
 			}
 			i++
-			newName = strings.ToLower(cmdArgs[i])
+			newName = normalizeGroupNameForCommand(cmdArgs[i])
 			// Validate new name
 			if newName == groupName {
 				return p.errorResponse("New name must be different from current name."), nil
+			}
+			if p.groupNameConflictsWithUser(newName) {
+				return p.errorResponse(groupNameUsernameConflictMessage(newName)), nil
 			}
 			// Check if new name already exists
 			existingGroup, _ := p.getGroup(teamID, newName)
@@ -474,6 +495,7 @@ Create and manage custom mention groups for your team.
 
 Once created, mention a group using ` + "`@groupname`" + ` in any message.
 All group members will receive a notification.
+Group names cannot match existing Mattermost usernames because user mentions take priority.
 
 ### Examples
 

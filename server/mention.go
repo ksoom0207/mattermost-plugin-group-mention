@@ -14,6 +14,61 @@ var (
 	mentionRegex = regexp.MustCompile(`(?:^|\s)@([a-zA-Z0-9_\-.]{2,64})\b`)
 )
 
+func extractMentionNames(message string) map[string]bool {
+	matches := mentionRegex.FindAllStringSubmatch(message, -1)
+	groupNames := make(map[string]bool)
+	for _, match := range matches {
+		if len(match) > 1 {
+			groupNames[strings.ToLower(match[1])] = true
+		}
+	}
+
+	return groupNames
+}
+
+func resolveGroupMentions(
+	mentionNames map[string]bool,
+	userExists func(string) bool,
+	getGroup func(string) (*Group, error),
+	logGroupError func(string, error),
+) map[string]*Group {
+	groups := make(map[string]*Group)
+	for groupName := range mentionNames {
+		if userExists(groupName) {
+			continue
+		}
+
+		group, err := getGroup(groupName)
+		if err != nil {
+			logGroupError(groupName, err)
+			continue
+		}
+		if group == nil {
+			continue
+		}
+
+		groups[groupName] = group
+	}
+
+	return groups
+}
+
+func (p *Plugin) findActualGroupMentions(teamID string, mentionNames map[string]bool) map[string]*Group {
+	return resolveGroupMentions(
+		mentionNames,
+		func(name string) bool {
+			userByUsername, _ := p.API.GetUserByUsername(name)
+			return userByUsername != nil
+		},
+		func(name string) (*Group, error) {
+			return p.getGroup(teamID, name)
+		},
+		func(name string, err error) {
+			p.logError("Failed to get group", "team_id", teamID, "group", name, "error", err.Error())
+		},
+	)
+}
+
 // MessageWillBePosted is called before a message is posted
 // This allows us to expand @group mentions to individual @user mentions
 // so Mattermost automatically sends push notifications
@@ -31,7 +86,26 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		return post, ""
 	}
 
-	// Check if channel is large and requires admin
+	// Find mention candidates in the message.
+	mentionNames := extractMentionNames(post.Message)
+	if len(mentionNames) == 0 {
+		return post, ""
+	}
+
+	teamID := channel.TeamId
+	groups := p.findActualGroupMentions(teamID, mentionNames)
+	if len(groups) == 0 {
+		return post, ""
+	}
+
+	// Check if too many actual group mentions. User mentions and unknown @names
+	// must not count toward this plugin limit.
+	if len(groups) > config.MaxMentionsPerMessage {
+		return post, fmt.Sprintf("Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage)
+	}
+
+	// Check if channel is large and requires admin after confirming this post
+	// contains at least one actual group mention.
 	if config.RequireChannelAdminInLargeChannels {
 		stats, statsErr := p.API.GetChannelStats(post.ChannelId)
 		if statsErr == nil && stats.MemberCount >= int64(config.LargeChannelMemberThreshold) {
@@ -41,52 +115,9 @@ func (p *Plugin) MessageWillBePosted(c *plugin.Context, post *model.Post) (*mode
 		}
 	}
 
-	// Find all group mentions in the message
-	matches := mentionRegex.FindAllStringSubmatch(post.Message, -1)
-	if len(matches) == 0 {
-		return post, ""
-	}
-
-	// Extract unique group names
-	groupNames := make(map[string]bool)
-	for _, match := range matches {
-		if len(match) > 1 {
-			groupNames[strings.ToLower(match[1])] = true
-		}
-	}
-
-	// Process each group mention and collect members
-	teamID := channel.TeamId
 	groupExpansions := make(map[string][]string) // groupName -> usernames
-	actualGroupCount := 0 // Track actual group mentions (not user mentions)
 
-	for groupName := range groupNames {
-		// Check if it's actually a user mention first
-		userByUsername, _ := p.API.GetUserByUsername(groupName)
-		if userByUsername != nil {
-			// This is a user mention, not a group mention
-			continue
-		}
-
-		// Get the group
-		group, err := p.getGroup(teamID, groupName)
-		if err != nil {
-			p.logError("Failed to get group", "team_id", teamID, "group", groupName, "error", err.Error())
-			continue
-		}
-		if group == nil {
-			// Group doesn't exist, leave the mention as-is
-			continue
-		}
-
-		// This is an actual group mention
-		actualGroupCount++
-
-		// Check if too many group mentions
-		if actualGroupCount > config.MaxMentionsPerMessage {
-			return post, fmt.Sprintf("Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage)
-		}
-
+	for groupName, group := range groups {
 		// Check rate limits
 		if !p.checkRateLimits(post.UserId, post.ChannelId, groupName) {
 			return post, "Rate limit exceeded. Please wait before mentioning this group again."
@@ -174,7 +205,28 @@ func (p *Plugin) processGroupMentions(post *model.Post) {
 		return
 	}
 
-	// Check if channel is large and requires admin
+	// Find mention candidates in the message.
+	mentionNames := extractMentionNames(post.Message)
+	if len(mentionNames) == 0 {
+		return
+	}
+
+	// Process each group mention
+	teamID := channel.TeamId
+	groups := p.findActualGroupMentions(teamID, mentionNames)
+
+	if len(groups) > config.MaxMentionsPerMessage {
+		p.sendEphemeralPost(post.ChannelId, post.UserId,
+			fmt.Sprintf(":warning: Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage))
+		return
+	}
+
+	if len(groups) == 0 {
+		return
+	}
+
+	// Check if channel is large and requires admin after confirming this post
+	// contains at least one actual group mention.
 	if config.RequireChannelAdminInLargeChannels {
 		stats, statsErr := p.API.GetChannelStats(post.ChannelId)
 		if statsErr == nil && stats.MemberCount >= int64(config.LargeChannelMemberThreshold) {
@@ -186,49 +238,9 @@ func (p *Plugin) processGroupMentions(post *model.Post) {
 		}
 	}
 
-	// Find all group mentions in the message
-	matches := mentionRegex.FindAllStringSubmatch(post.Message, -1)
-	if len(matches) == 0 {
-		return
-	}
-
-	// Extract unique group names
-	groupNames := make(map[string]bool)
-	for _, match := range matches {
-		if len(match) > 1 {
-			groupNames[strings.ToLower(match[1])] = true
-		}
-	}
-
-	if len(groupNames) > config.MaxMentionsPerMessage {
-		p.sendEphemeralPost(post.ChannelId, post.UserId,
-			fmt.Sprintf(":warning: Too many group mentions. Maximum allowed: %d", config.MaxMentionsPerMessage))
-		return
-	}
-
-	// Process each group mention
-	teamID := channel.TeamId
 	allMentionedUsers := make(map[string]bool)
 
-	for groupName := range groupNames {
-		// Check if it's actually a user mention first
-		userByUsername, _ := p.API.GetUserByUsername(groupName)
-		if userByUsername != nil {
-			// This is a user mention, not a group mention
-			continue
-		}
-
-		// Get the group
-		group, err := p.getGroup(teamID, groupName)
-		if err != nil {
-			p.logError("Failed to get group", "team_id", teamID, "group", groupName, "error", err.Error())
-			continue
-		}
-		if group == nil {
-			// Group doesn't exist
-			continue
-		}
-
+	for groupName, group := range groups {
 		// Check rate limits
 		if !p.checkRateLimits(post.UserId, post.ChannelId, groupName) {
 			p.sendEphemeralPost(post.ChannelId, post.UserId,

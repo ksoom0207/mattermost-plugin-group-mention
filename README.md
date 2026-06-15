@@ -77,6 +77,8 @@ Use the `/group create` command to create a new group:
 /group create dev --public --members @alice @bob @charlie
 ```
 
+Group names cannot match existing Mattermost usernames. If a user `@alice` exists, create a group like `@team-alice` or `@alice-group` instead.
+
 **Options:**
 - `--public`: Make the group visible to all team members (default)
 - `--private`: Make the group visible only to owners and admins
@@ -225,7 +227,9 @@ This plugin provides similar functionality for **Community Edition** users:
 
 ### What happens when a group name conflicts with a username?
 
-The plugin follows this priority:
+New groups and renamed groups cannot use an existing Mattermost username. This prevents ambiguous mentions.
+
+For existing conflicting names, the plugin follows this priority:
 1. Real username mentions are processed first by Mattermost
 2. Only non-matching patterns are checked against groups
 3. To avoid conflicts, use distinctive group names (e.g., `team-dev` instead of `dev`)
